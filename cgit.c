@@ -397,6 +397,7 @@ static void prepare_context(void)
 	ctx.env.server_port = getenv("SERVER_PORT");
 	ctx.env.http_cookie = getenv("HTTP_COOKIE");
 	ctx.env.http_referer = getenv("HTTP_REFERER");
+	ctx.env.http_remote_user = getenv("REMOTE_USER");
 	ctx.env.content_length = getenv("CONTENT_LENGTH") ? strtoul(getenv("CONTENT_LENGTH"), NULL, 10) : 0;
 	ctx.env.authenticated = 0;
 	ctx.page.mimetype = "text/html";
@@ -636,6 +637,7 @@ static inline void open_auth_filter(const char *function)
 		ctx.env.path_info ? ctx.env.path_info : "",
 		ctx.env.http_host ? ctx.env.http_host : "",
 		ctx.env.https ? ctx.env.https : "",
+		ctx.env.http_remote_user ? ctx.env.http_remote_user : "",
 		ctx.qry.repo ? ctx.qry.repo : "",
 		ctx.qry.page ? ctx.qry.page : "",
 		ctx.qry.url ? ctx.qry.url : "",

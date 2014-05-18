@@ -127,12 +127,13 @@ function filter_open(...)
 	http["path"] = select(6, ...)
 	http["host"] = select(7, ...)
 	http["https"] = select(8, ...)
+	http["remote_user"] = select(9, ...)
 
 	cgit = {}
-	cgit["repo"] = select(9, ...)
-	cgit["page"] = select(10, ...)
-	cgit["url"] = select(11, ...)
-	cgit["login"] = select(12, ...)
+	cgit["repo"] = select(10, ...)
+	cgit["page"] = select(11, ...)
+	cgit["url"] = select(12, ...)
+	cgit["login"] = select(13, ...)
 
 end
 

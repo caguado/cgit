@@ -65,6 +65,7 @@ ifdef HAVE_LINUX_SENDFILE
 	CGIT_CFLAGS += -DHAVE_LINUX_SENDFILE
 endif
 
+CGIT_OBJ_NAMES += authnz.o
 CGIT_OBJ_NAMES += cgit.o
 CGIT_OBJ_NAMES += cache.o
 CGIT_OBJ_NAMES += cmd.o

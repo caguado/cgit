@@ -376,4 +376,12 @@ extern char *expand_macros(const char *txt);
 
 extern const char *disambiguate_ref(const char *ref, int *must_free_result);
 
+extern void open_authnz_filter(const char *function, const char *repo, const char *refname);
+extern int close_authnz_filter(void);
+extern void open_authnz_repo(const char *function, const char *repo);
+extern void open_authnz_refname(const char *function, const char *refname);
+extern int valid_authnz_for_repo(const char *repo);
+extern int valid_authnz_for_refname(const char *refname);
+extern int valid_authnz_for_commit(struct commit *commit);
+
 #endif /* CGIT_H */

@@ -247,15 +247,25 @@ static void print_commit(struct commit *commit, struct rev_info *revs)
 	cgit_free_commitinfo(info);
 }
 
-static const char *disambiguate_ref(const char *ref, int *must_free_result)
+const char *disambiguate_ref(const char *ref, int *must_free_result)
 {
 	unsigned char sha1[20];
-	struct strbuf longref = STRBUF_INIT;
+	struct strbuf longref  = STRBUF_INIT;
+	int i;
 
-	strbuf_addf(&longref, "refs/heads/%s", ref);
-	if (get_sha1(longref.buf, sha1) == 0) {
-		*must_free_result = 1;
-		return strbuf_detach(&longref, NULL);
+	const char *refs_tmpl[] = {
+		"refs/heads",
+		"refs/tags"
+	};
+
+	for (i = 0; i < sizeof(refs_tmpl) / sizeof(refs_tmpl[0]); i++) {
+		strbuf_addf(&longref, "%s/%s", refs_tmpl[i], ref);
+		if (get_sha1(longref.buf, sha1) == 0) {
+			*must_free_result = 1;
+			return strbuf_detach(&longref, NULL);
+		}
+
+		strbuf_reset(&longref);
 	}
 
 	*must_free_result = 0;

@@ -381,4 +381,6 @@ extern int readfile(const char *path, char **buf, size_t *size);
 
 extern char *expand_macros(const char *txt);
 
+extern const char *disambiguate_ref(const char *ref, int *must_free_result);
+
 #endif /* CGIT_H */

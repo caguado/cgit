@@ -731,8 +731,11 @@ void cgit_print_docend()
 static int print_branch_option(const char *refname, const unsigned char *sha1,
 			       int flags, void *cb_data)
 {
-	char *name = (char *)refname;
-	html_option(name, name, ctx.qry.head);
+	/* Authorization beacon */
+	if (valid_authnz_for_refname(refname)){
+		char *name = (char *)refname;
+		html_option(name, name, ctx.qry.head);
+	}
 	return 0;
 }
 

@@ -63,6 +63,8 @@ void show_commit_decorations(struct commit *commit)
 	deco = lookup_decoration(&name_decoration, &commit->object);
 	html("<span class='decoration'>");
 	while (deco) {
+		if (!valid_authnz_for_refname(deco->name))
+			goto next;
 		if (!prefixcmp(deco->name, "refs/heads/")) {
 			strncpy(buf, deco->name + 11, sizeof(buf) - 1);
 			cgit_log_link(buf, NULL, "branch-deco", buf, NULL,
@@ -247,15 +249,25 @@ static void print_commit(struct commit *commit, struct rev_info *revs)
 	cgit_free_commitinfo(info);
 }
 
-static const char *disambiguate_ref(const char *ref, int *must_free_result)
+const char *disambiguate_ref(const char *ref, int *must_free_result)
 {
 	unsigned char sha1[20];
-	struct strbuf longref = STRBUF_INIT;
+	struct strbuf longref  = STRBUF_INIT;
+	int i;
 
-	strbuf_addf(&longref, "refs/heads/%s", ref);
-	if (get_sha1(longref.buf, sha1) == 0) {
-		*must_free_result = 1;
-		return strbuf_detach(&longref, NULL);
+	const char *refs_tmpl[] = {
+		"refs/heads",
+		"refs/tags"
+	};
+
+	for (i = 0; i < sizeof(refs_tmpl) / sizeof(refs_tmpl[0]); i++) {
+		strbuf_addf(&longref, "%s/%s", refs_tmpl[i], ref);
+		if (get_sha1(longref.buf, sha1) == 0) {
+			*must_free_result = 1;
+			return strbuf_detach(&longref, NULL);
+		}
+
+		strbuf_reset(&longref);
 	}
 
 	*must_free_result = 0;
@@ -288,6 +300,7 @@ static char *next_token(char **src)
 void cgit_print_log(const char *tip, int ofs, int cnt, char *grep, char *pattern,
 		    char *path, int pager, int commit_graph, int commit_sort)
 {
+	unsigned char sha1[20];
 	struct rev_info rev;
 	struct commit *commit;
 	struct argv_array rev_argv = ARGV_ARRAY_INIT;
@@ -299,6 +312,24 @@ void cgit_print_log(const char *tip, int ofs, int cnt, char *grep, char *pattern
 
 	if (!tip)
 		tip = ctx.qry.head;
+
+	if (get_sha1(tip, sha1)) {
+		cgit_print_error("Invalid revision name: %s", tip);
+		return;
+	}
+
+	commit = lookup_commit_reference(sha1);
+	if (!commit || parse_commit(commit)) {
+		cgit_print_error("Invalid commit reference: %s", tip);
+		return;
+	}
+
+	/* Authorization beacon */
+	if (!valid_authnz_for_commit(commit)) {
+		cgit_print_error("Access denied: %s", tip);
+		return;
+	}
+
 	tip = disambiguate_ref(tip, &must_free_tip);
 	argv_array_push(&rev_argv, tip);
 

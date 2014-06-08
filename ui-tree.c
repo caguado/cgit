@@ -278,6 +278,12 @@ void cgit_print_tree(const char *rev, char *path)
 		return;
 	}
 
+	/* Authorization beacon */
+	if (!valid_authnz_for_commit(commit)) {
+		cgit_print_error("Access denied: %s", rev);
+		return;
+	}
+
 	walk_tree_ctx.curr_rev = xstrdup(rev);
 
 	if (path == NULL) {

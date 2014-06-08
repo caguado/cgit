@@ -277,7 +277,9 @@ void cgit_print_repolist(void)
 		ctx.repo = &cgit_repolist.repos[i];
 		if (ctx.repo->hide || ctx.repo->ignore)
 			continue;
-		if (!(is_match(ctx.repo) && is_in_url(ctx.repo)))
+		/* Authorization beacon */
+		if (!(valid_authnz_for_repo(ctx.repo->name) &&
+		    is_match(ctx.repo) && is_in_url(ctx.repo)))
 			continue;
 		hits++;
 		if (hits <= ctx.qry.ofs)

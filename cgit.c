@@ -424,6 +424,10 @@ struct refmatch {
 static int find_current_ref(const char *refname, const unsigned char *sha1,
 			    int flags, void *cb_data)
 {
+	/* Authorization beacon */
+	if (!valid_authnz_for_refname(refname))
+		return 0;
+
 	struct refmatch *info;
 
 	info = (struct refmatch *)cb_data;
@@ -607,6 +611,19 @@ static int prepare_repo_cmd(void)
 		return 1;
 	}
 
+	/* Authorization beacon */
+	if (!valid_authnz_for_refname(ctx.qry.head)) {
+		ctx.page.title = "Forbidden";
+		ctx.page.status = 403;
+		ctx.page.statusmsg = "Forbidden";
+		cgit_print_http_headers();
+		cgit_print_docstart();
+		cgit_print_pageheader();
+		cgit_print_error("Access denied: %s", ctx.qry.head);
+		cgit_print_docend();
+		return 1;
+	}
+
 	if (get_sha1(ctx.qry.head, sha1)) {
 		char *tmp = xstrdup(ctx.qry.head);
 		ctx.qry.head = ctx.repo->defbranch;
@@ -668,8 +685,11 @@ static inline void authenticate_post(void)
 
 static inline void authenticate_cookie(void)
 {
-	/* If we don't have an auth_filter, consider all cookies valid, and thus return early. */
-	if (!ctx.cfg.auth_filter) {
+	/* If we don't have an auth_filter or the webserver did not authenticate the user,
+         * consider all cookies valid, and thus return early. */
+	if (!ctx.cfg.auth_filter || \
+	    (ctx.cfg.auth_filter && \
+	     ctx.env.http_remote_user && strcmp(ctx.env.http_remote_user, ""))) {
 		ctx.env.authenticated = 1;
 		return;
 	}

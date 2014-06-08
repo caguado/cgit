@@ -374,6 +374,13 @@ void cgit_print_diff(const char *new_rev, const char *old_rev,
 		cgit_print_error("Bad commit: %s", sha1_to_hex(new_rev_sha1));
 		return;
 	}
+
+	/* Authorization beacon */
+	if (!valid_authnz_for_commit(commit)) {
+		cgit_print_error("Access denied: %s", sha1_to_hex(new_rev_sha1));
+		return;
+	}
+
 	new_tree_sha1 = commit->tree->object.sha1;
 
 	if (old_rev) {
@@ -391,6 +398,11 @@ void cgit_print_diff(const char *new_rev, const char *old_rev,
 		commit2 = lookup_commit_reference(old_rev_sha1);
 		if (!commit2 || parse_commit(commit2)) {
 			cgit_print_error("Bad commit: %s", sha1_to_hex(old_rev_sha1));
+			return;
+		}
+		/* Authorization beacon */
+		if (!valid_authnz_for_commit(commit)) {
+			cgit_print_error("Access denied: %s", sha1_to_hex(old_rev_sha1));
 			return;
 		}
 		old_tree_sha1 = commit2->tree->object.sha1;

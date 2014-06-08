@@ -63,6 +63,8 @@ void show_commit_decorations(struct commit *commit)
 	deco = lookup_decoration(&name_decoration, &commit->object);
 	html("<span class='decoration'>");
 	while (deco) {
+		if (!valid_authnz_for_refname(deco->name))
+			goto next;
 		if (!prefixcmp(deco->name, "refs/heads/")) {
 			strncpy(buf, deco->name + 11, sizeof(buf) - 1);
 			cgit_log_link(buf, NULL, "branch-deco", buf, NULL,
@@ -298,6 +300,7 @@ static char *next_token(char **src)
 void cgit_print_log(const char *tip, int ofs, int cnt, char *grep, char *pattern,
 		    char *path, int pager, int commit_graph, int commit_sort)
 {
+	unsigned char sha1[20];
 	struct rev_info rev;
 	struct commit *commit;
 	struct argv_array rev_argv = ARGV_ARRAY_INIT;
@@ -309,6 +312,24 @@ void cgit_print_log(const char *tip, int ofs, int cnt, char *grep, char *pattern
 
 	if (!tip)
 		tip = ctx.qry.head;
+
+	if (get_sha1(tip, sha1)) {
+		cgit_print_error("Invalid revision name: %s", tip);
+		return;
+	}
+
+	commit = lookup_commit_reference(sha1);
+	if (!commit || parse_commit(commit)) {
+		cgit_print_error("Invalid commit reference: %s", tip);
+		return;
+	}
+
+	/* Authorization beacon */
+	if (!valid_authnz_for_commit(commit)) {
+		cgit_print_error("Access denied: %s", tip);
+		return;
+	}
+
 	tip = disambiguate_ref(tip, &must_free_tip);
 	argv_array_push(&rev_argv, tip);
 

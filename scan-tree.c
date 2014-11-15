@@ -61,7 +61,7 @@ static int gitconfig_config(const char *key, const char *value, void *cb)
 		config_fn(repo, "desc", value);
 	else if (!strcmp(key, "gitweb.category"))
 		config_fn(repo, "section", value);
-	else if (!prefixcmp(key, "cgit."))
+	else if (starts_with(key, "cgit."))
 		config_fn(repo, key + 5, value);
 
 	return 0;
@@ -105,7 +105,7 @@ static void add_repo(const char *base, struct strbuf *path, repo_config_fn fn)
 		return;
 	strbuf_setlen(path, pathlen);
 
-	if (prefixcmp(path->buf, base))
+	if (!starts_with(path->buf, base))
 		strbuf_addbuf(&rel, path);
 	else
 		strbuf_addstr(&rel, path->buf + strlen(base) + 1);
@@ -161,7 +161,7 @@ static void add_repo(const char *base, struct strbuf *path, repo_config_fn fn)
 			*slash = '\0';
 			repo->section = xstrdup(rel.buf);
 			*slash = '/';
-			if (!prefixcmp(repo->name, repo->section)) {
+			if (starts_with(repo->name, repo->section)) {
 				repo->name += strlen(repo->section);
 				if (*repo->name == '/')
 					repo->name++;

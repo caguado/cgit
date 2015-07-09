@@ -1,69 +1,90 @@
 # Build cgit
 #
-RPMBUILD = /usr/bin/rpmbuild
+SHELL := /bin/bash
+MOCK = /usr/bin/mock
+CURL = /usr/bin/curl
 GIT = /usr/bin/git
 SED = /bin/sed
+TAR = /bin/tar
 
-CGIT_PKG = cgit
-CGIT_BRANCH = v0.11.2.1bbp
-CGIT_VERSION := $(shell $(GIT) describe --abbrev=0 $(CGIT_BRANCH) | $(SED) -e 's/^v//' -e 's/-/./g')
-CGIT_RELEASE = 1
-CGIT_DIST = el6
+PACKAGE_NAME = cgit
+PACKAGE_BRANCH = v0.11.2.1bbp
+PACKAGE_VERSION := $(shell $(GIT) describe --abbrev=0 $(PACKAGE_BRANCH) | $(SED) -e 's/^v//' -e 's/-/./g')
+PACKAGE_RELEASE = 1
 
-GIT_VERSION = 1.9.0
-GIT_DOWNLOAD = http://git-core.googlecode.com/files/git-$(GIT_VERSION).tar.gz
+GIT_VERSION = 2.3.2
+GIT_DOWNLOAD = https://www.kernel.org/pub/software/scm/git/git-$(GIT_VERSION).tar.gz
 
-BUILD_DIR = build
-SPEC_NAME = $(BUILD_DIR)/$(CGIT_PKG).spec
-CONF_NAME = $(BUILD_DIR)/cgitrc
-TGZ_NAME  = $(BUILD_DIR)/$(CGIT_PKG)-$(CGIT_VERSION).tar.gz
-GIT_TGZ   = $(BUILD_DIR)/git-$(GIT_VERSION).tar.gz
-SRPM_NAME = $(BUILD_DIR)/$(CGIT_PKG)-$(CGIT_VERSION)-$(CGIT_RELEASE).src.rpm
-RPM_NAME  = $(BUILD_DIR)/$(CGIT_PKG)-$(CGIT_VERSION)-$(CGIT_RELEASE).$(CGIT_DIST).rpm
+RPM_DIST = el6
+RPM_PLATFORM = x86_64
+MOCK_PROFILE = rhel-6-$(RPM_PLATFORM)
 
-.PHONY: setup tgz srpm rpm clean
+SRC_DIR = src
+OUTPUT_DIR = artifacts
+SRPM_DIR = $(OUTPUT_DIR)/srpm
+RPM_DIR = $(OUTPUT_DIR)/rpm
+PACKAGE_SRC_DIR = $(SRC_DIR)/$(PACKAGE_NAME)
 
-all: rpm
+SPEC_NAME = $(PACKAGE_NAME).spec
+GIT_TGZ   = git-$(GIT_VERSION).tar.gz
+TGZ_NAME  = $(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.bz2
+SRPM_NAME = $(SRPM_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)-$(PACKAGE_RELEASE).$(RPM_DIST).src.rpm
 
-tgz: $(TGZ_NAME)
+MOCK_BUILD = $(RPM_DIR)/$(PACKAGE_NAME)-$(PACKAGE_VERSION)-$(PACKAGE_RELEASE).$(RPM_DIST).$(RPM_PLATFORM).rpm
+
+SRC_FILES = \
+	$(TGZ_NAME) \
+	$(GIT_TGZ) \
+	cgitrc
+
+.PHONY: setup tbz srpm mock clean
+
+all: mock
+
+tbz: $(TGZ_NAME)
 srpm: $(SRPM_NAME)
-rpm: $(RPM_NAME)
+mock: $(MOCK_BUILD)
 
-$(TGZ_NAME): $(BUILD_DIR)
-	$(GIT) fetch --all --prune
-	$(GIT) fetch origin $(CGIT_BRANCH):$(CGIT_BRANCH)
-	$(GIT) archive --format=tar --prefix=$(CGIT_PKG)-$(CGIT_VERSION)/ \
-		$(CGIT_BRANCH) | gzip > $(TGZ_NAME)
+$(PACKAGE_SRC_DIR): | $(SRC_DIR)
+	$(GIT) clone --shared . $(PACKAGE_SRC_DIR)
+	pushd $(PACKAGE_SRC_DIR); \
+	$(GIT) checkout $(PACKAGE_BRANCH); \
+	$(GIT) submodule update --init; \
+	popd
 
-$(SPEC_NAME): $(CGIT_PKG).spec
-	$(SED)  -e 's|@@VERSION@@|$(CGIT_VERSION)|g' \
-		-e 's|@@RELEASE@@|$(CGIT_RELEASE)|g' \
-		-e 's|@@GIT_VERSION@@|$(GIT_VERSION)|g' \
-		$(CGIT_PKG).spec > $(SPEC_NAME)
+$(TGZ_NAME): $(PACKAGE_SRC_DIR)
+	$(TAR) --transform 's,$(PACKAGE_SRC_DIR),$(PACKAGE_NAME)-$(PACKAGE_VERSION),S' \
+	--exclude .git \
+	--exclude .gitignore \
+	--exclude .gitmodules \
+	-c -j -f $(TGZ_NAME) $(PACKAGE_SRC_DIR)
 
 $(GIT_TGZ): $(BUILD_DIR)
-	curl $(GIT_DOWNLOAD) > $(GIT_TGZ)
+	$(CURL) $(GIT_DOWNLOAD) > $(GIT_TGZ)
 
-$(CONF_NAME): $(BUILD_DIR)
-	cp cgitrc $(CONF_NAME)
+$(SRPM_NAME): $(SRC_FILES) | $(OUTPUT_DIR)
+	$(MOCK) -r $(MOCK_PROFILE) --configdir=. --buildsrpm \
+	--resultdir=$(SRPM_DIR) \
+	--sources=. \
+	--spec $(SPEC_NAME)
 
-$(SRPM_NAME): $(TGZ_NAME) $(SPEC_NAME) $(GIT_TGZ) $(CONF_NAME)
-	$(RPMBUILD) -bs --nodeps \
-		--define "_tmppath /tmp" \
-		--define "_sourcedir $(BUILD_DIR)" \
-		--define "_srcrpmdir $(BUILD_DIR)" \
-		--define 'dist %{nil}' \
-		$(SPEC_NAME)
+$(MOCK_BUILD): $(SRPM_NAME) | $(OUTPUT_DIR)
+	$(MOCK) -r $(MOCK_PROFILE) --configdir=. \
+	--resultdir=$(RPM_DIR) \
+	$(SRPM_NAME)
 
-$(RPM_NAME): $(SRPM_NAME)
-	$(RPMBUILD) --rebuild $(SRPM_NAME)
+$(SRC_DIR):
+	mkdir -p $(SRC_DIR)
 
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
-
-setup: $(BUILD_DIR)
-	rpmdev-setuptree
+$(OUTPUT_DIR):
+	mkdir -p $(OUTPUT_DIR)
+	mkdir -p $(SRPM_DIR)
+	mkdir -p $(RPM_DIR)
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(SRC_DIR)
+	rm -rf $(OUTPUT_DIR)
+	rm -f $(GIT_TGZ)
+	rm -f $(TGZ_NAME)
+	rm -f $(SRPM_NAME)
 

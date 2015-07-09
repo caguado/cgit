@@ -1,6 +1,6 @@
 # Review bug: https://bugzilla.redhat.com/479723
 
-%global gitver      @@GIT_VERSION@@
+%global gitver      2.3.2
 %global cachedir    %{_localstatedir}/cache/%{name}
 %global filterdir   %{_libexecdir}/%{name}/filters
 %global scriptdir   %{_localstatedir}/www/cgi-bin
@@ -21,15 +21,15 @@ make V=1 %{?_smp_mflags} \\\
      prefix=%{_prefix}
 
 Name:           cgit
-Version:        @@VERSION@@
-Release:        @@RELEASE@@%{?dist}
+Version:        0.11.2.1bbp
+Release:        1%{?dist}
 Summary:        A fast web interface for git
 
 Group:          Development/Tools
 License:        GPLv2
 URL:            http://git.zx2c4.com/cgit/
-Source0:        http://git.zx2c4.com/cgit/snapshot/%{name}-%{version}.tar.gz
-Source1:        http://git-core.googlecode.com/files/git-%{gitver}.tar.gz
+Source0:        http://git.zx2c4.com/cgit/snapshot/%{name}-%{version}.tar.bz2
+Source1:        https://www.kernel.org/pub/software/scm/git/git-%{gitver}.tar.gz
 Source2:        cgitrc
 BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
@@ -89,6 +89,10 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Jul 09 2015 Carlos Aguado <carlos.aguado@epfl.ch> 0.11.2.1bbp-1
+- Update to upstream v0.11.2
+- Add authentication and authorization checks
+
 * Sun May 18 2014 Carlos Aguado <carlos.aguado@epfl.ch> 0.10.1.1bbp-1
 - Update to 0.10.1.1bbp
 - Remove cgit.httpd

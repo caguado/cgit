@@ -677,7 +677,7 @@ source filter::
 	filtered contents is expected on standard output.
 
 auth filter::
-	The authentication filter receives 12 parameters:
+	The authentication filter receives 13 parameters:
 	  - filter action, explained below, which specifies which action the
 	    filter is called for
 	  - http cookie
@@ -685,6 +685,7 @@ auth filter::
 	  - http referer
 	  - http path
 	  - http https flag
+	  - http remote user
 	  - cgit repo
 	  - cgit page
 	  - cgit url

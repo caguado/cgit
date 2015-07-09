@@ -397,6 +397,7 @@ static void prepare_context(void)
 	ctx.env.server_port = getenv("SERVER_PORT");
 	ctx.env.http_cookie = getenv("HTTP_COOKIE");
 	ctx.env.http_referer = getenv("HTTP_REFERER");
+	ctx.env.http_remote_user = getenv("REMOTE_USER");
 	ctx.env.content_length = getenv("CONTENT_LENGTH") ? strtoul(getenv("CONTENT_LENGTH"), NULL, 10) : 0;
 	ctx.env.authenticated = 0;
 	ctx.page.mimetype = "text/html";
@@ -424,6 +425,10 @@ struct refmatch {
 static int find_current_ref(const char *refname, const unsigned char *sha1,
 			    int flags, void *cb_data)
 {
+	/* Authorization beacon */
+	if (!valid_authnz_for_refname(refname))
+		return 0;
+
 	struct refmatch *info;
 
 	info = (struct refmatch *)cb_data;
@@ -607,6 +612,19 @@ static int prepare_repo_cmd(void)
 		return 1;
 	}
 
+	/* Authorization beacon */
+	if (!valid_authnz_for_refname(ctx.qry.head)) {
+		ctx.page.title = "Forbidden";
+		ctx.page.status = 403;
+		ctx.page.statusmsg = "Forbidden";
+		cgit_print_http_headers();
+		cgit_print_docstart();
+		cgit_print_pageheader();
+		cgit_print_error("Access denied: %s", ctx.qry.head);
+		cgit_print_docend();
+		return 1;
+	}
+
 	if (get_sha1(ctx.qry.head, sha1)) {
 		char *tmp = xstrdup(ctx.qry.head);
 		ctx.qry.head = ctx.repo->defbranch;
@@ -636,6 +654,7 @@ static inline void open_auth_filter(const char *function)
 		ctx.env.path_info ? ctx.env.path_info : "",
 		ctx.env.http_host ? ctx.env.http_host : "",
 		ctx.env.https ? ctx.env.https : "",
+		ctx.env.http_remote_user ? ctx.env.http_remote_user : "",
 		ctx.qry.repo ? ctx.qry.repo : "",
 		ctx.qry.page ? ctx.qry.page : "",
 		ctx.qry.url ? ctx.qry.url : "",
@@ -668,8 +687,11 @@ static inline void authenticate_post(void)
 
 static inline void authenticate_cookie(void)
 {
-	/* If we don't have an auth_filter, consider all cookies valid, and thus return early. */
-	if (!ctx.cfg.auth_filter) {
+	/* If we don't have an auth_filter or the webserver did not authenticate the user,
+         * consider all cookies valid, and thus return early. */
+	if (!ctx.cfg.auth_filter || \
+	    (ctx.cfg.auth_filter && \
+	     ctx.env.http_remote_user && strcmp(ctx.env.http_remote_user, ""))) {
 		ctx.env.authenticated = 1;
 		return;
 	}

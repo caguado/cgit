@@ -290,6 +290,7 @@ struct cgit_environment {
 	const char *server_port;
 	const char *http_cookie;
 	const char *http_referer;
+	const char *http_remote_user;
 	unsigned int content_length;
 	int authenticated;
 };
@@ -380,5 +381,15 @@ extern void cgit_prepare_repo_env(struct cgit_repo * repo);
 extern int readfile(const char *path, char **buf, size_t *size);
 
 extern char *expand_macros(const char *txt);
+
+extern const char *disambiguate_ref(const char *ref, int *must_free_result);
+
+extern void open_authnz_filter(const char *function, const char *repo, const char *refname);
+extern int close_authnz_filter(void);
+extern void open_authnz_repo(const char *function, const char *repo);
+extern void open_authnz_refname(const char *function, const char *refname);
+extern int valid_authnz_for_repo(const char *repo);
+extern int valid_authnz_for_refname(const char *refname);
+extern int valid_authnz_for_commit(struct commit *commit);
 
 #endif /* CGIT_H */

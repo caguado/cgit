@@ -5,7 +5,7 @@ GIT = /usr/bin/git
 SED = /bin/sed
 
 CGIT_PKG = cgit
-CGIT_BRANCH = pkg/stable
+CGIT_BRANCH = v0.11.2.1bbp
 CGIT_VERSION := $(shell $(GIT) describe --abbrev=0 $(CGIT_BRANCH) | $(SED) -e 's/^v//' -e 's/-/./g')
 CGIT_RELEASE = 1
 CGIT_DIST = el6

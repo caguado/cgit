@@ -32,16 +32,22 @@ static int print_ref_info(const char *refname, const unsigned char *sha1,
 static void print_pack_info(void)
 {
 	struct packed_git *pack;
-	int ofs;
+	char *offset;
 
 	ctx.page.mimetype = "text/plain";
 	ctx.page.filename = "objects/info/packs";
 	cgit_print_http_headers();
-	ofs = strlen(ctx.repo->path) + strlen("/objects/pack/");
 	prepare_packed_git();
-	for (pack = packed_git; pack; pack = pack->next)
-		if (pack->pack_local)
-			htmlf("P %s\n", pack->pack_name + ofs);
+	for (pack = packed_git; pack; pack = pack->next) {
+		if (pack->pack_local) {
+			offset = strrchr(pack->pack_name, '/');
+			if (offset && offset[1] != '\0')
+				++offset;
+			else
+				offset = pack->pack_name;
+			htmlf("P %s\n", offset);
+		}
+	}
 }
 
 static void send_file(char *path)
@@ -63,16 +69,18 @@ static void send_file(char *path)
 	}
 	ctx.page.mimetype = "application/octet-stream";
 	ctx.page.filename = path;
-	if (!starts_with(ctx.repo->path, path))
-		ctx.page.filename += strlen(ctx.repo->path) + 1;
+	skip_prefix(path, ctx.repo->path, &ctx.page.filename);
+	skip_prefix(ctx.page.filename, "/", &ctx.page.filename);
 	cgit_print_http_headers();
 	html_include(path);
 }
 
 void cgit_clone_info(void)
 {
-	if (!ctx.qry.path || strcmp(ctx.qry.path, "refs"))
+	if (!ctx.qry.path || strcmp(ctx.qry.path, "refs")) {
+		html_status(400, "Bad request", 0);
 		return;
+	}
 
 	ctx.page.mimetype = "text/plain";
 	ctx.page.filename = "info/refs";

@@ -91,6 +91,12 @@ static void repo_config(struct cgit_repo *repo, const char *name, const char *va
 			repo->source_filter = cgit_new_filter(value, SOURCE);
 		else if (!strcmp(name, "email-filter"))
 			repo->email_filter = cgit_new_filter(value, EMAIL);
+		else if (!strcmp(name, "owner-filter"))
+			repo->owner_filter = cgit_new_filter(value, OWNER);
+	} else if (!strcmp(name, "hide")) {
+		repo->hide = atoi(value);
+	} else if (!strcmp(name, "ignore")) {
+		repo->ignore = atoi(value);
 	}
 }
 
@@ -194,6 +200,8 @@ static void config_cb(const char *name, const char *value)
 		ctx.cfg.commit_filter = cgit_new_filter(value, COMMIT);
 	else if (!strcmp(name, "email-filter"))
 		ctx.cfg.email_filter = cgit_new_filter(value, EMAIL);
+	else if (!strcmp(name, "owner-filter"))
+		ctx.cfg.owner_filter = cgit_new_filter(value, OWNER);
 	else if (!strcmp(name, "auth-filter"))
 		ctx.cfg.auth_filter = cgit_new_filter(value, AUTH);
 	else if (!strcmp(name, "embedded"))
@@ -237,7 +245,7 @@ static void config_cb(const char *name, const char *value)
 	else if (!strcmp(name, "summary-tags"))
 		ctx.cfg.summary_tags = atoi(value);
 	else if (!strcmp(name, "side-by-side-diffs"))
-		ctx.cfg.ssdiff = atoi(value);
+		ctx.cfg.difftype = atoi(value) ? DIFF_SSDIFF : DIFF_UNIFIED;
 	else if (!strcmp(name, "agefile"))
 		ctx.cfg.agefile = xstrdup(value);
 	else if (!strcmp(name, "mimetype-file"))
@@ -312,9 +320,13 @@ static void querystring_cb(const char *name, const char *value)
 		ctx.qry.showmsg = atoi(value);
 	} else if (!strcmp(name, "period")) {
 		ctx.qry.period = xstrdup(value);
+	} else if (!strcmp(name, "dt")) {
+		ctx.qry.difftype = atoi(value);
+		ctx.qry.has_difftype = 1;
 	} else if (!strcmp(name, "ss")) {
-		ctx.qry.ssdiff = atoi(value);
-		ctx.qry.has_ssdiff = 1;
+		/* No longer generated, but there may be links out there. */
+		ctx.qry.difftype = atoi(value) ? DIFF_SSDIFF : DIFF_UNIFIED;
+		ctx.qry.has_difftype = 1;
 	} else if (!strcmp(name, "all")) {
 		ctx.qry.show_all = atoi(value);
 	} else if (!strcmp(name, "context")) {
@@ -372,7 +384,7 @@ static void prepare_context(void)
 	ctx.cfg.summary_log = 10;
 	ctx.cfg.summary_tags = 10;
 	ctx.cfg.max_atom_items = 10;
-	ctx.cfg.ssdiff = 0;
+	ctx.cfg.difftype = DIFF_UNIFIED;
 	ctx.env.cgit_config = getenv("CGIT_CONFIG");
 	ctx.env.http_host = getenv("HTTP_HOST");
 	ctx.env.https = getenv("HTTPS");
@@ -458,7 +470,7 @@ static char *guess_defbranch(void)
 	const char *ref;
 	unsigned char sha1[20];
 
-	ref = resolve_ref_unsafe("HEAD", sha1, 0, NULL);
+	ref = resolve_ref_unsafe("HEAD", 0, sha1, NULL);
 	if (!ref || !starts_with(ref, "refs/heads/"))
 		return "master";
 	return xstrdup(ref + 11);
@@ -509,12 +521,6 @@ static void choose_readme(struct cgit_repo *repo)
 			free(ref);
 			continue;
 		}
-		/* If there's only one item, we skip the possibly expensive
-		 * selection process. */
-		if (repo->readme.nr == 1) {
-			found = 1;
-			break;
-		}
 		if (ref) {
 			if (cgit_ref_path_exists(filename, ref, 1)) {
 				found = 1;
@@ -533,6 +539,17 @@ static void choose_readme(struct cgit_repo *repo)
 	repo->readme.strdup_strings = 0;
 	if (found)
 		string_list_append(&repo->readme, filename)->util = ref;
+}
+
+static void print_no_repo_clone_urls(const char *url)
+{
+        html("<tr><td><a rel='vcs-git' href='");
+        html_url_path(url);
+        html("' title='");
+        html_attr(ctx.repo->name);
+        html(" Git repository'>");
+        html_txt(url);
+        html("</a></td></tr>\n");
 }
 
 static int prepare_repo_cmd(void)
@@ -585,6 +602,25 @@ static int prepare_repo_cmd(void)
 		cgit_print_docstart();
 		cgit_print_pageheader();
 		cgit_print_error("Repository seems to be empty");
+		if (!strcmp(ctx.qry.page, "summary")) {
+			html("<table class='list'><tr class='nohover'><td>&nbsp;</td></tr><tr class='nohover'><th class='left'>Clone</th></tr>\n");
+			cgit_prepare_repo_env(ctx.repo);
+			cgit_add_clone_urls(print_no_repo_clone_urls);
+			html("</table>\n");
+		}
+		cgit_print_docend();
+		return 1;
+	}
+
+	/* Authorization beacon */
+	if (!valid_authnz_for_refname(ctx.qry.head)) {
+		ctx.page.title = "Forbidden";
+		ctx.page.status = 403;
+		ctx.page.statusmsg = "Forbidden";
+		cgit_print_http_headers();
+		cgit_print_docstart();
+		cgit_print_pageheader();
+		cgit_print_error("Access denied: %s", ctx.qry.head);
 		cgit_print_docend();
 		return 1;
 	}
@@ -615,7 +651,7 @@ static int prepare_repo_cmd(void)
 		free(tmp);
 		return 1;
 	}
-	sort_string_list(&ctx.repo->submodules);
+	string_list_sort(&ctx.repo->submodules);
 	cgit_prepare_repo_env(ctx.repo);
 	choose_readme(ctx.repo);
 	return 0;
@@ -824,6 +860,8 @@ static void print_repo(FILE *f, struct cgit_repo *repo)
 		cgit_fprintf_filter(repo->source_filter, f, "repo.source-filter=");
 	if (repo->email_filter && repo->email_filter != ctx.cfg.email_filter)
 		cgit_fprintf_filter(repo->email_filter, f, "repo.email-filter=");
+	if (repo->owner_filter && repo->owner_filter != ctx.cfg.owner_filter)
+		cgit_fprintf_filter(repo->owner_filter, f, "repo.owner-filter=");
 	if (repo->snapshots != ctx.cfg.snapshots) {
 		char *tmp = build_snapshot_setting(repo->snapshots);
 		fprintf(f, "repo.snapshots=%s\n", tmp ? tmp : "");
@@ -846,6 +884,8 @@ static void print_repo(FILE *f, struct cgit_repo *repo)
 		else if (repo->commit_sort == 2)
 			fprintf(f, "repo.commit-sort=topo\n");
 	}
+	fprintf(f, "repo.hide=%d\n", repo->hide);
+	fprintf(f, "repo.ignore=%d\n", repo->ignore);
 	fprintf(f, "\n");
 }
 
@@ -1009,7 +1049,7 @@ static void cgit_parse_args(int argc, const char **argv)
 	}
 }
 
-static int calc_ttl()
+static int calc_ttl(void)
 {
 	if (!ctx.repo)
 		return ctx.cfg.cache_root_ttl;

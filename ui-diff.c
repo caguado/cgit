@@ -31,7 +31,7 @@ static struct fileinfo {
 	unsigned int removed;
 	unsigned long old_size;
 	unsigned long new_size;
-	int binary:1;
+	unsigned int binary:1;
 } *items;
 
 static int use_ssdiff = 0;
@@ -97,7 +97,7 @@ static void print_fileinfo(struct fileinfo *info)
 	}
 	htmlf("</td><td class='%s'>", class);
 	cgit_diff_link(info->new_path, NULL, NULL, ctx.qry.head, ctx.qry.sha1,
-		       ctx.qry.sha2, info->new_path, 0);
+		       ctx.qry.sha2, info->new_path);
 	if (info->status == DIFF_STATUS_COPIED || info->status == DIFF_STATUS_RENAMED) {
 		htmlf(" (%s from ",
 		      info->status == DIFF_STATUS_COPIED ? "copied" : "renamed");
@@ -175,7 +175,7 @@ static void cgit_print_diffstat(const unsigned char *old_sha1,
 
 	html("<div class='diffstat-header'>");
 	cgit_diff_link("Diffstat", NULL, NULL, ctx.qry.head, ctx.qry.sha1,
-		       ctx.qry.sha2, NULL, 0);
+		       ctx.qry.sha2, NULL);
 	if (prefix) {
 		html(" (limited to '");
 		html_txt(prefix);
@@ -311,7 +311,7 @@ static void filepair_cb(struct diff_filepair *pair)
 		cgit_ssdiff_footer();
 }
 
-void cgit_print_diff_ctrls()
+void cgit_print_diff_ctrls(void)
 {
 	int i, curr;
 
@@ -345,10 +345,11 @@ void cgit_print_diff_ctrls()
 	html("</tr><tr>");
 	html("<td class='label'>mode:</td>");
 	html("<td class='ctrl'>");
-	html("<select name='ss' onchange='this.form.submit();'>");
-	curr = ctx.qry.has_ssdiff ? ctx.qry.ssdiff : ctx.cfg.ssdiff;
+	html("<select name='dt' onchange='this.form.submit();'>");
+	curr = ctx.qry.has_difftype ? ctx.qry.difftype : ctx.cfg.difftype;
 	html_intoption(0, "unified", curr);
 	html_intoption(1, "ssdiff", curr);
+	html_intoption(2, "stat only", curr);
 	html("</select></td></tr>");
 	html("<tr><td/><td class='ctrl'>");
 	html("<noscript><input type='submit' value='reload'/></noscript>");
@@ -362,6 +363,7 @@ void cgit_print_diff(const char *new_rev, const char *old_rev,
 {
 	struct commit *commit, *commit2;
 	const unsigned char *old_tree_sha1, *new_tree_sha1;
+	diff_type difftype;
 
 	if (!new_rev)
 		new_rev = ctx.qry.head;
@@ -432,12 +434,26 @@ void cgit_print_diff(const char *new_rev, const char *old_rev,
 		return;
 	}
 
-	use_ssdiff = ctx.qry.has_ssdiff ? ctx.qry.ssdiff : ctx.cfg.ssdiff;
+	difftype = ctx.qry.has_difftype ? ctx.qry.difftype : ctx.cfg.difftype;
+	use_ssdiff = difftype == DIFF_SSDIFF;
 
 	if (show_ctrls)
 		cgit_print_diff_ctrls();
 
+	/*
+	 * Clicking on a link to a file in the diff stat should show a diff
+	 * of the file, showing the diff stat limited to a single file is
+	 * pretty useless.  All links from this point on will be to
+	 * individual files, so we simply reset the difftype in the query
+	 * here to avoid propagating DIFF_STATONLY to the individual files.
+	 */
+	if (difftype == DIFF_STATONLY)
+		ctx.qry.difftype = ctx.cfg.difftype;
+
 	cgit_print_diffstat(old_rev_sha1, new_rev_sha1, prefix);
+
+	if (difftype == DIFF_STATONLY)
+		return;
 
 	if (use_ssdiff) {
 		html("<table summary='ssdiff' class='ssdiff'>");

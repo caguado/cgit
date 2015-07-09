@@ -45,8 +45,8 @@ out:
 	return result;
 }
 
-struct cgit_repo *repo;
-repo_config_fn config_fn;
+static struct cgit_repo *repo;
+static repo_config_fn config_fn;
 
 static void repo_config(const char *name, const char *value)
 {
@@ -123,9 +123,12 @@ static void add_repo(const char *base, struct strbuf *path, repo_config_fn fn)
 		strbuf_setlen(path, pathlen);
 	}
 
-	if (ctx.cfg.remove_suffix)
-		if ((p = strrchr(repo->url, '.')) && !strcmp(p, ".git"))
-			*p = '\0';
+	if (ctx.cfg.remove_suffix) {
+		size_t urllen;
+		strip_suffix(repo->url, ".git", &urllen);
+		strip_suffix_mem(repo->url, &urllen, "/");
+		repo->url[urllen] = '\0';
+	}
 	repo->path = xstrdup(path->buf);
 	while (!repo->owner) {
 		if ((pwd = getpwuid(st.st_uid)) == NULL) {

@@ -11,7 +11,7 @@
 #include "cmd.h"
 #include "html.h"
 
-const char cgit_doctype[] =
+static const char cgit_doctype[] =
 "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\"\n"
 "  \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n";
 
@@ -46,7 +46,7 @@ void cgit_vprint_error(const char *fmt, va_list ap)
 	html("</div>\n");
 }
 
-const char *cgit_httpscheme()
+const char *cgit_httpscheme(void)
 {
 	if (ctx.env.https && !strcmp(ctx.env.https, "on"))
 		return "https://";
@@ -54,7 +54,7 @@ const char *cgit_httpscheme()
 		return "http://";
 }
 
-const char *cgit_hosturl()
+const char *cgit_hosturl(void)
 {
 	if (ctx.env.http_host)
 		return ctx.env.http_host;
@@ -65,7 +65,18 @@ const char *cgit_hosturl()
 	return fmtalloc("%s:%s", ctx.env.server_name, ctx.env.server_port);
 }
 
-const char *cgit_rooturl()
+const char *cgit_currenturl(void)
+{
+	if (!ctx.qry.url)
+		return cgit_rooturl();
+	const char *root = cgit_rooturl();
+	size_t len = strlen(root);
+	if (len && root[len - 1] == '/')
+		return fmtalloc("%s%s", root, ctx.qry.url);
+	return fmtalloc("%s/%s", root, ctx.qry.url);
+}
+
+const char *cgit_rooturl(void)
 {
 	if (ctx.cfg.virtual_root)
 		return ctx.cfg.virtual_root;
@@ -73,9 +84,9 @@ const char *cgit_rooturl()
 		return ctx.cfg.script_name;
 }
 
-const char *cgit_loginurl()
+const char *cgit_loginurl(void)
 {
-	static const char *login_url = 0;
+	static const char *login_url;
 	if (!login_url)
 		login_url = fmtalloc("%s?p=login", cgit_rooturl());
 	return login_url;
@@ -112,7 +123,7 @@ char *cgit_fileurl(const char *reponame, const char *pagename,
 char *cgit_pageurl(const char *reponame, const char *pagename,
 		   const char *query)
 {
-	return cgit_fileurl(reponame, pagename, 0, query);
+	return cgit_fileurl(reponame, pagename, NULL, query);
 }
 
 const char *cgit_repobasename(const char *reponame)
@@ -140,14 +151,14 @@ const char *cgit_repobasename(const char *reponame)
 	return rvbuf;
 }
 
-static void site_url(const char *page, const char *search, const char *sort, int ofs)
+static void site_url(const char *page, const char *search, const char *sort, int ofs, int always_root)
 {
 	char *delim = "?";
 
-	if (ctx.cfg.virtual_root)
-		html_attr(ctx.cfg.virtual_root);
+	if (always_root || page)
+		html_attr(cgit_rooturl());
 	else
-		html_url_path(ctx.cfg.script_name);
+		html_attr(cgit_currenturl());
 
 	if (page) {
 		htmlf("?p=%s", page);
@@ -172,7 +183,7 @@ static void site_url(const char *page, const char *search, const char *sort, int
 }
 
 static void site_link(const char *page, const char *name, const char *title,
-		      const char *class, const char *search, const char *sort, int ofs)
+		      const char *class, const char *search, const char *sort, int ofs, int always_root)
 {
 	html("<a");
 	if (title) {
@@ -186,16 +197,16 @@ static void site_link(const char *page, const char *name, const char *title,
 		html("'");
 	}
 	html(" href='");
-	site_url(page, search, sort, ofs);
+	site_url(page, search, sort, ofs, always_root);
 	html("'>");
 	html_txt(name);
 	html("</a>");
 }
 
 void cgit_index_link(const char *name, const char *title, const char *class,
-		     const char *pattern, const char *sort, int ofs)
+		     const char *pattern, const char *sort, int ofs, int always_root)
 {
-	site_link(NULL, name, title, class, pattern, sort, ofs);
+	site_link(NULL, name, title, class, pattern, sort, ofs, always_root);
 }
 
 static char *repolink(const char *title, const char *class, const char *page,
@@ -273,9 +284,9 @@ void cgit_summary_link(const char *name, const char *title, const char *class,
 }
 
 void cgit_tag_link(const char *name, const char *title, const char *class,
-		   const char *head, const char *rev)
+		   const char *tag)
 {
-	reporevlink("tag", name, title, class, head, rev, NULL);
+	reporevlink("tag", name, title, class, tag, NULL, NULL);
 }
 
 void cgit_tree_link(const char *name, const char *title, const char *class,
@@ -328,8 +339,7 @@ void cgit_log_link(const char *name, const char *title, const char *class,
 }
 
 void cgit_commit_link(char *name, const char *title, const char *class,
-		      const char *head, const char *rev, const char *path,
-		      int toggle_ssdiff)
+		      const char *head, const char *rev, const char *path)
 {
 	if (strlen(name) > ctx.cfg.max_msg_len && ctx.cfg.max_msg_len >= 15) {
 		name[ctx.cfg.max_msg_len] = '\0';
@@ -347,9 +357,9 @@ void cgit_commit_link(char *name, const char *title, const char *class,
 		html_url_arg(rev);
 		delim = "&amp;";
 	}
-	if ((ctx.qry.ssdiff && !toggle_ssdiff) || (!ctx.qry.ssdiff && toggle_ssdiff)) {
+	if (ctx.qry.difftype) {
 		html(delim);
-		html("ss=1");
+		htmlf("dt=%d", ctx.qry.difftype);
 		delim = "&amp;";
 	}
 	if (ctx.qry.context > 0 && ctx.qry.context != 3) {
@@ -386,7 +396,7 @@ void cgit_snapshot_link(const char *name, const char *title, const char *class,
 
 void cgit_diff_link(const char *name, const char *title, const char *class,
 		    const char *head, const char *new_rev, const char *old_rev,
-		    const char *path, int toggle_ssdiff)
+		    const char *path)
 {
 	char *delim;
 
@@ -403,9 +413,9 @@ void cgit_diff_link(const char *name, const char *title, const char *class,
 		html_url_arg(old_rev);
 		delim = "&amp;";
 	}
-	if ((ctx.qry.ssdiff && !toggle_ssdiff) || (!ctx.qry.ssdiff && toggle_ssdiff)) {
+	if (ctx.qry.difftype) {
 		html(delim);
-		html("ss=1");
+		htmlf("dt=%d", ctx.qry.difftype);
 		delim = "&amp;";
 	}
 	if (ctx.qry.context > 0 && ctx.qry.context != 3) {
@@ -440,12 +450,12 @@ static void cgit_self_link(char *name, const char *title, const char *class)
 {
 	if (!strcmp(ctx.qry.page, "repolist"))
 		cgit_index_link(name, title, class, ctx.qry.search, ctx.qry.sort,
-				ctx.qry.ofs);
+				ctx.qry.ofs, 1);
 	else if (!strcmp(ctx.qry.page, "summary"))
 		cgit_summary_link(name, title, class, ctx.qry.head);
 	else if (!strcmp(ctx.qry.page, "tag"))
-		cgit_tag_link(name, title, class, ctx.qry.head,
-			      ctx.qry.has_sha1 ? ctx.qry.sha1 : NULL);
+		cgit_tag_link(name, title, class, ctx.qry.has_sha1 ?
+			       ctx.qry.sha1 : ctx.qry.head);
 	else if (!strcmp(ctx.qry.page, "tree"))
 		cgit_tree_link(name, title, class, ctx.qry.head,
 			       ctx.qry.has_sha1 ? ctx.qry.sha1 : NULL,
@@ -463,7 +473,7 @@ static void cgit_self_link(char *name, const char *title, const char *class)
 	else if (!strcmp(ctx.qry.page, "commit"))
 		cgit_commit_link(name, title, class, ctx.qry.head,
 				 ctx.qry.has_sha1 ? ctx.qry.sha1 : NULL,
-				 ctx.qry.path, 0);
+				 ctx.qry.path);
 	else if (!strcmp(ctx.qry.page, "patch"))
 		cgit_patch_link(name, title, class, ctx.qry.head,
 				ctx.qry.has_sha1 ? ctx.qry.sha1 : NULL,
@@ -479,7 +489,7 @@ static void cgit_self_link(char *name, const char *title, const char *class)
 	else if (!strcmp(ctx.qry.page, "diff"))
 		cgit_diff_link(name, title, class, ctx.qry.head,
 			       ctx.qry.sha1, ctx.qry.sha2,
-			       ctx.qry.path, 0);
+			       ctx.qry.path);
 	else if (!strcmp(ctx.qry.page, "stats"))
 		cgit_stats_link(name, title, class, ctx.qry.head,
 				ctx.qry.path);
@@ -503,7 +513,7 @@ void cgit_object_link(struct object *obj)
 	shortrev[10] = '\0';
 	if (obj->type == OBJ_COMMIT) {
 		cgit_commit_link(fmt("commit %s...", shortrev), NULL, NULL,
-				 ctx.qry.head, fullrev, NULL, 0);
+				 ctx.qry.head, fullrev, NULL);
 		return;
 	} else if (obj->type == OBJ_TREE)
 		page = "tree";
@@ -549,25 +559,32 @@ void cgit_submodule_link(const char *class, char *path, const char *rev)
 			item = lookup_path(list, path);
 		}
 	}
-	html("<a ");
-	if (class)
-		htmlf("class='%s' ", class);
-	html("href='");
-	if (item) {
-		html_attrf(item->util, rev);
-	} else if (ctx.repo->module_link) {
-		dir = strrchr(path, '/');
-		if (dir)
-			dir++;
-		else
-			dir = path;
-		html_attrf(ctx.repo->module_link, dir, rev);
+	if (item || ctx.repo->module_link) {
+		html("<a ");
+		if (class)
+			htmlf("class='%s' ", class);
+		html("href='");
+		if (item) {
+			html_attrf(item->util, rev);
+		} else {
+			dir = strrchr(path, '/');
+			if (dir)
+				dir++;
+			else
+				dir = path;
+			html_attrf(ctx.repo->module_link, dir, rev);
+		}
+		html("'>");
+		html_txt(path);
+		html("</a>");
 	} else {
-		html("#");
+		html("<span");
+		if (class)
+			htmlf(" class='%s'", class);
+		html(">");
+		html_txt(path);
+		html("</span>");
 	}
-	html("'>");
-	html_txt(path);
-	html("</a>");
 	html_txtf(" @ %.7s", rev);
 	if (item && tail)
 		path[len - 1] = tail;
@@ -588,6 +605,23 @@ void cgit_print_date(time_t secs, const char *format, int local_time)
 	html_txt(buf);
 }
 
+static void print_rel_date(time_t t, double value,
+	const char *class, const char *suffix)
+{
+	char buf[64];
+	struct tm *time;
+
+	if (ctx.cfg.local_time)
+		time = localtime(&t);
+	else
+		time = gmtime(&t);
+	strftime(buf, sizeof(buf) - 1, FMT_LONGDATE, time);
+
+	htmlf("<span class='%s' title='", class);
+	html_attr(buf);
+	htmlf("'>%.0f %s</span>", value, suffix);
+}
+
 void cgit_print_age(time_t t, time_t max_relative, const char *format)
 {
 	time_t now, secs;
@@ -605,32 +639,26 @@ void cgit_print_age(time_t t, time_t max_relative, const char *format)
 	}
 
 	if (secs < TM_HOUR * 2) {
-		htmlf("<span class='age-mins'>%.0f min.</span>",
-		      secs * 1.0 / TM_MIN);
+		print_rel_date(t, secs * 1.0 / TM_MIN, "age-mins", "min.");
 		return;
 	}
 	if (secs < TM_DAY * 2) {
-		htmlf("<span class='age-hours'>%.0f hours</span>",
-		      secs * 1.0 / TM_HOUR);
+		print_rel_date(t, secs * 1.0 / TM_HOUR, "age-hours", "hours");
 		return;
 	}
 	if (secs < TM_WEEK * 2) {
-		htmlf("<span class='age-days'>%.0f days</span>",
-		      secs * 1.0 / TM_DAY);
+		print_rel_date(t, secs * 1.0 / TM_DAY, "age-days", "days");
 		return;
 	}
 	if (secs < TM_MONTH * 2) {
-		htmlf("<span class='age-weeks'>%.0f weeks</span>",
-		      secs * 1.0 / TM_WEEK);
+		print_rel_date(t, secs * 1.0 / TM_WEEK, "age-weeks", "weeks");
 		return;
 	}
 	if (secs < TM_YEAR * 2) {
-		htmlf("<span class='age-months'>%.0f months</span>",
-		      secs * 1.0 / TM_MONTH);
+		print_rel_date(t, secs * 1.0 / TM_MONTH, "age-months", "months");
 		return;
 	}
-	htmlf("<span class='age-years'>%.0f years</span>",
-	      secs * 1.0 / TM_YEAR);
+	print_rel_date(t, secs * 1.0 / TM_YEAR, "age-years", "years");
 }
 
 void cgit_print_http_headers(void)
@@ -659,6 +687,15 @@ void cgit_print_http_headers(void)
 	html("\n");
 	if (ctx.env.request_method && !strcmp(ctx.env.request_method, "HEAD"))
 		exit(0);
+}
+
+static void print_rel_vcs_link(const char *url)
+{
+	html("<link rel='vcs-git' href='");
+	html_attr(url);
+	html("' title='");
+	html_attr(ctx.repo->name);
+	html(" Git repository'/>\n");
 }
 
 void cgit_print_docstart(void)
@@ -699,6 +736,8 @@ void cgit_print_docstart(void)
 		html("' type='application/atom+xml'/>\n");
 		strbuf_release(&sb);
 	}
+	if (ctx.repo)
+		cgit_add_clone_urls(print_rel_vcs_link);
 	if (ctx.cfg.head_include)
 		html_include(ctx.cfg.head_include);
 	html("</head>\n");
@@ -707,7 +746,7 @@ void cgit_print_docstart(void)
 		html_include(ctx.cfg.header);
 }
 
-void cgit_print_docend()
+void cgit_print_docend(void)
 {
 	html("</div> <!-- class=content -->\n");
 	if (ctx.cfg.embedded) {
@@ -719,13 +758,38 @@ void cgit_print_docend()
 	if (ctx.cfg.footer)
 		html_include(ctx.cfg.footer);
 	else {
-		htmlf("<div class='footer'>generated  by cgit %s at ",
+		htmlf("<div class='footer'>generated by <a href='http://git.zx2c4.com/cgit/about/'>cgit %s</a> at ",
 			cgit_version);
 		cgit_print_date(time(NULL), FMT_LONGDATE, ctx.cfg.local_time);
 		html("</div>\n");
 	}
 	html("</div> <!-- id=cgit -->\n");
 	html("</body>\n</html>\n");
+}
+
+static void add_clone_urls(void (*fn)(const char *), char *txt, char *suffix)
+{
+	struct strbuf **url_list = strbuf_split_str(txt, ' ', 0);
+	int i;
+
+	for (i = 0; url_list[i]; i++) {
+		strbuf_rtrim(url_list[i]);
+		if (url_list[i]->len == 0)
+			continue;
+		if (suffix && *suffix)
+			strbuf_addf(url_list[i], "/%s", suffix);
+		fn(url_list[i]->buf);
+	}
+
+	strbuf_list_free(url_list);
+}
+
+void cgit_add_clone_urls(void (*fn)(const char *))
+{
+	if (ctx.repo->clone_url)
+		add_clone_urls(fn, expand_macros(ctx.repo->clone_url), NULL);
+	else if (ctx.cfg.clone_prefix)
+		add_clone_urls(fn, ctx.cfg.clone_prefix, ctx.repo->url);
 }
 
 static int print_branch_option(const char *refname, const unsigned char *sha1,
@@ -825,7 +889,7 @@ static void print_header(void)
 
 	html("<td class='main'>");
 	if (ctx.repo) {
-		cgit_index_link("index", NULL, NULL, NULL, NULL, 0);
+		cgit_index_link("index", NULL, NULL, NULL, NULL, 0, 1);
 		html(" : ");
 		cgit_summary_link(ctx.repo->name, ctx.repo->name, NULL, NULL);
 		if (ctx.env.authenticated) {
@@ -878,9 +942,9 @@ void cgit_print_pageheader(void)
 		cgit_tree_link("tree", NULL, hc("tree"), ctx.qry.head,
 			       ctx.qry.sha1, ctx.qry.vpath);
 		cgit_commit_link("commit", NULL, hc("commit"),
-				 ctx.qry.head, ctx.qry.sha1, ctx.qry.vpath, 0);
+				 ctx.qry.head, ctx.qry.sha1, ctx.qry.vpath);
 		cgit_diff_link("diff", NULL, hc("diff"), ctx.qry.head,
-			       ctx.qry.sha1, ctx.qry.sha2, ctx.qry.vpath, 0);
+			       ctx.qry.sha1, ctx.qry.sha2, ctx.qry.vpath);
 		if (ctx.repo->max_stats)
 			cgit_stats_link("stats", NULL, hc("stats"),
 					ctx.qry.head, ctx.qry.vpath);
@@ -903,13 +967,13 @@ void cgit_print_pageheader(void)
 		html("<input type='submit' value='search'/>\n");
 		html("</form>\n");
 	} else if (ctx.env.authenticated) {
-		site_link(NULL, "index", NULL, hc("repolist"), NULL, NULL, 0);
+		site_link(NULL, "index", NULL, hc("repolist"), NULL, NULL, 0, 1);
 		if (ctx.cfg.root_readme)
 			site_link("about", "about", NULL, hc("about"),
-				  NULL, NULL, 0);
+				  NULL, NULL, 0, 1);
 		html("</td><td class='form'>");
 		html("<form method='get' action='");
-		html_attr(cgit_rooturl());
+		html_attr(cgit_currenturl());
 		html("'>\n");
 		html("<input type='text' name='q' size='10' value='");
 		html_attr(ctx.qry.search);

@@ -53,7 +53,11 @@ typedef void (*filepair_fn)(struct diff_filepair *pair);
 typedef void (*linediff_fn)(char *line, int len);
 
 typedef enum {
-	ABOUT, COMMIT, SOURCE, EMAIL, AUTH
+	DIFF_UNIFIED, DIFF_SSDIFF, DIFF_STATONLY
+} diff_type;
+
+typedef enum {
+	ABOUT, COMMIT, SOURCE, EMAIL, AUTH, OWNER
 } filter_type;
 
 struct cgit_filter {
@@ -100,7 +104,10 @@ struct cgit_repo {
 	struct cgit_filter *commit_filter;
 	struct cgit_filter *source_filter;
 	struct cgit_filter *email_filter;
+	struct cgit_filter *owner_filter;
 	struct string_list submodules;
+	int hide;
+	int ignore;
 };
 
 typedef void (*repo_config_fn)(struct cgit_repo *repo, const char *name,
@@ -150,7 +157,7 @@ struct reflist {
 struct cgit_query {
 	int has_symref;
 	int has_sha1;
-	int has_ssdiff;
+	int has_difftype;
 	char *raw;
 	char *repo;
 	char *page;
@@ -168,7 +175,7 @@ struct cgit_query {
 	int nohead;
 	char *sort;
 	int showmsg;
-	int ssdiff;
+	diff_type difftype;
 	int show_all;
 	int context;
 	int ignorews;
@@ -245,7 +252,7 @@ struct cgit_config {
 	int summary_branches;
 	int summary_log;
 	int summary_tags;
-	int ssdiff;
+	diff_type difftype;
 	int branch_sort;
 	int commit_sort;
 	struct string_list mimetypes;
@@ -253,6 +260,7 @@ struct cgit_config {
 	struct cgit_filter *commit_filter;
 	struct cgit_filter *source_filter;
 	struct cgit_filter *email_filter;
+	struct cgit_filter *owner_filter;
 	struct cgit_filter *auth_filter;
 };
 

@@ -1,6 +1,6 @@
 all::
 
-CGIT_VERSION = v0.10.2
+CGIT_VERSION = v0.11.2
 CGIT_SCRIPT_NAME = cgit.cgi
 CGIT_SCRIPT_PATH = /var/www/htdocs/cgit
 CGIT_DATA_PATH = $(CGIT_SCRIPT_PATH)
@@ -14,7 +14,7 @@ htmldir = $(docdir)
 pdfdir = $(docdir)
 mandir = $(prefix)/share/man
 SHA1_HEADER = <openssl/sha.h>
-GIT_VER = 2.0.1
+GIT_VER = 2.3.2
 GIT_URL = https://www.kernel.org/pub/software/scm/git/git-$(GIT_VER).tar.gz
 INSTALL = install
 COPYTREE = cp -r
@@ -67,6 +67,9 @@ all:: cgit
 
 cgit:
 	$(QUIET_SUBDIR0)git $(QUIET_SUBDIR1) -f ../cgit.mk ../cgit $(EXTRA_GIT_TARGETS) NO_CURL=1
+
+sparse:
+	$(QUIET_SUBDIR0)git $(QUIET_SUBDIR1) -f ../cgit.mk NO_CURL=1 cgit-sparse
 
 test:
 	@$(MAKE) --no-print-directory cgit EXTRA_GIT_TARGETS=all

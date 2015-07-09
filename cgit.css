@@ -254,7 +254,7 @@ div#cgit div.error {
 	margin: 1em 2em;
 }
 
-div#cgit a.ls-blob, div#cgit a.ls-dir, div#cgit a.ls-mod {
+div#cgit a.ls-blob, div#cgit a.ls-dir, div#cgit .ls-mod {
 	font-family: monospace;
 }
 
@@ -589,6 +589,13 @@ div#cgit div.footer {
 	text-align: center;
 	font-size: 80%;
 	color: #ccc;
+}
+div#cgit div.footer a {
+	color: #ccc;
+	text-decoration: none;
+}
+div#cgit div.footer a:hover {
+	text-decoration: underline;
 }
 div#cgit a.branch-deco {
 	color: #000;

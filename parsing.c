@@ -69,38 +69,21 @@ static char *substr(const char *head, const char *tail)
 	return buf;
 }
 
-static char *parse_user(char *t, char **name, char **email, unsigned long *date)
+static void parse_user(const char *t, char **name, char **email, unsigned long *date)
 {
-	char *p = t;
-	int mode = 1;
+	struct ident_split ident;
+	unsigned email_len;
 
-	while (p && *p) {
-		if (mode == 1 && *p == '<') {
-			*name = substr(t, p - 1);
-			t = p;
-			mode++;
-		} else if (mode == 1 && *p == '\n') {
-			*name = substr(t, p);
-			p++;
-			break;
-		} else if (mode == 2 && *p == '>') {
-			*email = substr(t, p + 1);
-			t = p;
-			mode++;
-		} else if (mode == 2 && *p == '\n') {
-			*email = substr(t, p);
-			p++;
-			break;
-		} else if (mode == 3 && isdigit(*p)) {
-			*date = atol(p);
-			mode++;
-		} else if (*p == '\n') {
-			p++;
-			break;
-		}
-		p++;
+	if (!split_ident_line(&ident, t, strchrnul(t, '\n') - t)) {
+		*name = substr(ident.name_begin, ident.name_end);
+
+		email_len = ident.mail_end - ident.mail_begin;
+		*email = xmalloc(strlen("<") + email_len + strlen(">") + 1);
+		sprintf(*email, "<%.*s>", email_len, ident.mail_begin);
+
+		if (ident.date_begin)
+			*date = strtoul(ident.date_begin, NULL, 10);
 	}
-	return p;
 }
 
 #ifdef NO_ICONV
@@ -129,44 +112,52 @@ static const char *reencode(char **txt, const char *src_enc, const char *dst_enc
 }
 #endif
 
+static const char *next_header_line(const char *p)
+{
+	p = strchr(p, '\n');
+	if (!p)
+		return NULL;
+	return p + 1;
+}
+
+static int end_of_header(const char *p)
+{
+	return !p || (*p == '\n');
+}
+
 struct commitinfo *cgit_parse_commit(struct commit *commit)
 {
+	const int sha1hex_len = 40;
 	struct commitinfo *ret;
-	char *p = commit->buffer, *t;
+	const char *p = get_cached_commit_buffer(commit, NULL);
+	const char *t;
 
-	ret = xmalloc(sizeof(*ret));
+	ret = xcalloc(1, sizeof(struct commitinfo));
 	ret->commit = commit;
-	ret->author = NULL;
-	ret->author_email = NULL;
-	ret->committer = NULL;
-	ret->committer_email = NULL;
-	ret->subject = NULL;
-	ret->msg = NULL;
-	ret->msg_encoding = NULL;
 
-	if (p == NULL)
+	if (!p)
 		return ret;
 
-	if (!starts_with(p, "tree "))
+	if (!skip_prefix(p, "tree ", &p))
 		die("Bad commit: %s", sha1_to_hex(commit->object.sha1));
-	else
-		p += 46; // "tree " + hex[40] + "\n"
+	p += sha1hex_len + 1;
 
-	while (starts_with(p, "parent "))
-		p += 48; // "parent " + hex[40] + "\n"
+	while (skip_prefix(p, "parent ", &p))
+		p += sha1hex_len + 1;
 
-	if (p && starts_with(p, "author ")) {
-		p = parse_user(p + 7, &ret->author, &ret->author_email,
+	if (p && skip_prefix(p, "author ", &p)) {
+		parse_user(p, &ret->author, &ret->author_email,
 			&ret->author_date);
+		p = next_header_line(p);
 	}
 
-	if (p && starts_with(p, "committer ")) {
-		p = parse_user(p + 10, &ret->committer, &ret->committer_email,
+	if (p && skip_prefix(p, "committer ", &p)) {
+		parse_user(p, &ret->committer, &ret->committer_email,
 			&ret->committer_date);
+		p = next_header_line(p);
 	}
 
-	if (p && starts_with(p, "encoding ")) {
-		p += 9;
+	if (p && skip_prefix(p, "encoding ", &p)) {
 		t = strchr(p, '\n');
 		if (t) {
 			ret->msg_encoding = substr(p, t + 1);
@@ -174,38 +165,21 @@ struct commitinfo *cgit_parse_commit(struct commit *commit)
 		}
 	}
 
-	/* if no special encoding is found, assume UTF-8 */
 	if (!ret->msg_encoding)
 		ret->msg_encoding = xstrdup("UTF-8");
 
-	// skip unknown header fields
-	while (p && *p && (*p != '\n')) {
-		p = strchr(p, '\n');
-		if (p)
-			p++;
-	}
-
-	// skip empty lines between headers and message
+	while (!end_of_header(p))
+		p = next_header_line(p);
 	while (p && *p == '\n')
 		p++;
-
 	if (!p)
 		return ret;
 
-	t = strchr(p, '\n');
-	if (t) {
-		ret->subject = substr(p, t);
-		p = t + 1;
-
-		while (p && *p == '\n') {
-			p = strchr(p, '\n');
-			if (p)
-				p++;
-		}
-		if (p)
-			ret->msg = xstrdup(p);
-	} else
-		ret->subject = xstrdup(p);
+	t = strchrnul(p, '\n');
+	ret->subject = substr(p, t);
+	while (*t == '\n')
+		t++;
+	ret->msg = xstrdup(t);
 
 	reencode(&ret->author, ret->msg_encoding, PAGE_ENCODING);
 	reencode(&ret->author_email, ret->msg_encoding, PAGE_ENCODING);
@@ -217,49 +191,34 @@ struct commitinfo *cgit_parse_commit(struct commit *commit)
 	return ret;
 }
 
-
 struct taginfo *cgit_parse_tag(struct tag *tag)
 {
 	void *data;
 	enum object_type type;
 	unsigned long size;
-	char *p;
-	struct taginfo *ret;
+	const char *p;
+	struct taginfo *ret = NULL;
 
 	data = read_sha1_file(tag->object.sha1, &type, &size);
-	if (!data || type != OBJ_TAG) {
-		free(data);
-		return 0;
-	}
+	if (!data || type != OBJ_TAG)
+		goto cleanup;
 
-	ret = xmalloc(sizeof(*ret));
-	ret->tagger = NULL;
-	ret->tagger_email = NULL;
-	ret->tagger_date = 0;
-	ret->msg = NULL;
+	ret = xcalloc(1, sizeof(struct taginfo));
 
-	p = data;
-
-	while (p && *p) {
-		if (*p == '\n')
-			break;
-
-		if (starts_with(p, "tagger ")) {
-			p = parse_user(p + 7, &ret->tagger, &ret->tagger_email,
+	for (p = data; !end_of_header(p); p = next_header_line(p)) {
+		if (skip_prefix(p, "tagger ", &p)) {
+			parse_user(p, &ret->tagger, &ret->tagger_email,
 				&ret->tagger_date);
-		} else {
-			p = strchr(p, '\n');
-			if (p)
-				p++;
 		}
 	}
 
-	// skip empty lines between headers and message
 	while (p && *p == '\n')
 		p++;
 
 	if (p && *p)
 		ret->msg = xstrdup(p);
+
+cleanup:
 	free(data);
 	return ret;
 }

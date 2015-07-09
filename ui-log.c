@@ -12,7 +12,7 @@
 #include "ui-shared.h"
 #include "argv-array.h"
 
-int files, add_lines, rem_lines;
+static int files, add_lines, rem_lines;
 
 /*
  * The list of available column colors in the commit graph.
@@ -56,11 +56,11 @@ static void inspect_files(struct diff_filepair *pair)
 
 void show_commit_decorations(struct commit *commit)
 {
-	struct name_decoration *deco;
+	const struct name_decoration *deco;
 	static char buf[1024];
 
 	buf[sizeof(buf) - 1] = 0;
-	deco = lookup_decoration(&name_decoration, &commit->object);
+	deco = get_name_decoration(&commit->object);
 	html("<span class='decoration'>");
 	while (deco) {
 		if (!valid_authnz_for_refname(deco->name))
@@ -73,11 +73,11 @@ void show_commit_decorations(struct commit *commit)
 		}
 		else if (starts_with(deco->name, "tag: refs/tags/")) {
 			strncpy(buf, deco->name + 15, sizeof(buf) - 1);
-			cgit_tag_link(buf, NULL, "tag-deco", ctx.qry.head, buf);
+			cgit_tag_link(buf, NULL, "tag-deco", buf);
 		}
 		else if (starts_with(deco->name, "refs/tags/")) {
 			strncpy(buf, deco->name + 10, sizeof(buf) - 1);
-			cgit_tag_link(buf, NULL, "tag-deco", ctx.qry.head, buf);
+			cgit_tag_link(buf, NULL, "tag-deco", buf);
 		}
 		else if (starts_with(deco->name, "refs/remotes/")) {
 			if (!ctx.repo->enable_remote_branches)
@@ -92,7 +92,7 @@ void show_commit_decorations(struct commit *commit)
 			strncpy(buf, deco->name, sizeof(buf) - 1);
 			cgit_commit_link(buf, NULL, "deco", ctx.qry.head,
 					 sha1_to_hex(commit->object.sha1),
-					 ctx.qry.vpath, 0);
+					 ctx.qry.vpath);
 		}
 next:
 		deco = deco->next;
@@ -167,7 +167,7 @@ static void print_commit(struct commit *commit, struct rev_info *revs)
 		}
 	}
 	cgit_commit_link(info->subject, NULL, NULL, ctx.qry.head,
-			 sha1_to_hex(commit->object.sha1), ctx.qry.vpath, 0);
+			 sha1_to_hex(commit->object.sha1), ctx.qry.vpath);
 	show_commit_decorations(commit);
 	html("</td><td>");
 	cgit_open_filter(ctx.repo->email_filter, info->author_email, "log");
@@ -419,16 +419,14 @@ void cgit_print_log(const char *tip, int ofs, int cnt, char *grep, char *pattern
 		ofs = 0;
 
 	for (i = 0; i < ofs && (commit = get_revision(&rev)) != NULL; i++) {
-		free(commit->buffer);
-		commit->buffer = NULL;
+		free_commit_buffer(commit);
 		free_commit_list(commit->parents);
 		commit->parents = NULL;
 	}
 
 	for (i = 0; i < cnt && (commit = get_revision(&rev)) != NULL; i++) {
 		print_commit(commit, &rev);
-		free(commit->buffer);
-		commit->buffer = NULL;
+		free_commit_buffer(commit);
 		free_commit_list(commit->parents);
 		commit->parents = NULL;
 	}

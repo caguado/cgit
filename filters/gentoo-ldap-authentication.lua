@@ -3,6 +3,8 @@
 -- Requirements:
 -- 	luacrypto >= 0.3
 -- 	<http://mkottman.github.io/luacrypto/>
+-- 	lualdap >= 1.2
+-- 	<http://git.zx2c4.com/lualdap/about/>
 --
 
 
@@ -12,24 +14,13 @@
 --
 --
 
--- A list of password protected repositories along with the users who can access them.
+-- A list of password protected repositories, with which gentooAccess
+-- group is allowed to access each one.
 local protected_repos = {
-	glouglou	= { laurent = true, jason = true },
-	qt		= { jason = true, bob = true }
+	glouglou = "infra",
+	portage = "dev"
 }
 
--- Please note that, in production, you'll want to replace this simple lookup
--- table with either a table of salted and hashed passwords (using something
--- smart like scrypt), or replace this table lookup with an external support,
--- such as consulting your system's pam / shadow system, or an external
--- database, or an external validating web service. For testing, or for
--- extremely low-security usage, you may be able, however, to get away with
--- compromising on hardcoding the passwords in cleartext, as we have done here.
-local users = {
-	jason		= "secretpassword",
-	laurent		= "s3cr3t",
-	bob		= "ilikelua"
-}
 
 -- All cookies will be authenticated based on this secret. Make it something
 -- totally random and impossible to guess. It should be large.
@@ -45,7 +36,6 @@ local secret = "BE SURE TO CUSTOMIZE THIS STRING TO SOMETHING BIG AND RANDOM"
 
 -- Sets HTTP cookie headers based on post and sets up redirection.
 function authenticate_post()
-	local password = users[post["username"]]
 	local redirect = validate_value("redirect", post["redirect"])
 
 	if redirect == nil then
@@ -54,14 +44,13 @@ function authenticate_post()
 	end
 
 	redirect_to(redirect)
-
-	-- Lua hashes strings, so these comparisons are time invariant.
-	if password == nil or password ~= post["password"] then
+	
+	local groups = gentoo_ldap_user_groups(post["username"], post["password"])
+	if groups == nil then
 		set_cookie("cgitauth", "")
 	else
 		-- One week expiration time
-		local username = secure_value("username", post["username"], os.time() + 604800)
-		set_cookie("cgitauth", username)
+		set_cookie("cgitauth", secure_value("gentoogroups", table.concat(groups, ","), os.time() + 604800))
 	end
 
 	html("\n")
@@ -71,23 +60,27 @@ end
 
 -- Returns 1 if the cookie is valid and 0 if it is not.
 function authenticate_cookie()
-	accepted_users = protected_repos[cgit["repo"]]
-	if accepted_users == nil then
+	local required_group = protected_repos[cgit["repo"]]
+	if required_group == nil then
 		-- We return as valid if the repo is not protected.
 		return 1
 	end
-
-	local username = validate_value("username", get_cookie(http["cookie"], "cgitauth"))
-	if username == nil or not accepted_users[username:lower()] then
+	
+	local user_groups = validate_value("gentoogroups", get_cookie(http["cookie"], "cgitauth"))
+	if user_groups == nil or user_groups == "" then
 		return 0
-	else
-		return 1
 	end
+	for group in string.gmatch(user_groups, "[^,]+") do
+		if group == required_group then
+			return 1
+		end
+	end
+	return 0
 end
 
 -- Prints the html for the login form.
 function body()
-	html("<h2>Authentication Required</h2>")
+	html("<h2>Gentoo LDAP Authentication Required</h2>")
 	html("<form method='post' action='")
 	html_attr(cgit["login"])
 	html("'>")
@@ -103,7 +96,54 @@ function body()
 	return 0
 end
 
+--
+--
+-- Gentoo LDAP support.
+--
+--
 
+local lualdap = require("lualdap")
+
+function gentoo_ldap_user_groups(username, password)
+	-- Ensure the user is alphanumeric
+	if username:match("%W") then
+		return nil
+	end
+
+	local who = "uid=" .. username .. ",ou=devs,dc=gentoo,dc=org"
+
+	local ldap, err = lualdap.open_simple {
+		uri = "ldap://ldap1.gentoo.org",
+		who = who,
+		password = password,
+		starttls = true,
+		certfile = "/var/www/uwsgi/cgit/gentoo-ldap/star.gentoo.org.crt",
+		keyfile = "/var/www/uwsgi/cgit/gentoo-ldap/star.gentoo.org.key",
+		cacertfile = "/var/www/uwsgi/cgit/gentoo-ldap/ca.pem"
+	}
+	if ldap == nil then
+		return nil
+	end
+
+	local group_suffix = ".group"
+	local group_suffix_len = group_suffix:len()
+	local groups = {}
+	for dn, attribs in ldap:search { base = who, scope = "subtree" } do
+		local access = attribs["gentooAccess"]
+		if dn == who and access ~= nil then
+			for i, v in ipairs(access) do
+				local vlen = v:len()
+				if vlen > group_suffix_len and v:sub(-group_suffix_len) == group_suffix then
+					table.insert(groups, v:sub(1, vlen - group_suffix_len))
+				end
+			end
+		end
+	end
+
+	ldap:close()
+
+	return groups
+end
 
 --
 --
@@ -127,13 +167,12 @@ function filter_open(...)
 	http["path"] = select(6, ...)
 	http["host"] = select(7, ...)
 	http["https"] = select(8, ...)
-	http["remote_user"] = select(9, ...)
 
 	cgit = {}
-	cgit["repo"] = select(10, ...)
-	cgit["page"] = select(11, ...)
-	cgit["url"] = select(12, ...)
-	cgit["login"] = select(13, ...)
+	cgit["repo"] = select(9, ...)
+	cgit["page"] = select(10, ...)
+	cgit["url"] = select(11, ...)
+	cgit["login"] = select(12, ...)
 
 end
 
@@ -182,7 +221,7 @@ end
 
 function get_cookie(cookies, name)
 	cookies = string.gsub(";" .. cookies .. ";", "%s*;%s*", ";")
-	return url_decode(string.match(cookies, ";" .. name .. "=(.-);"))
+	return string.match(cookies, ";" .. name .. "=(.-);")
 end
 
 

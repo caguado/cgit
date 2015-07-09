@@ -72,8 +72,10 @@ struct cgit_repo *cgit_add_repo(const char *url)
 	ret->commit_filter = ctx.cfg.commit_filter;
 	ret->source_filter = ctx.cfg.source_filter;
 	ret->email_filter = ctx.cfg.email_filter;
+	ret->owner_filter = ctx.cfg.owner_filter;
 	ret->clone_url = ctx.cfg.clone_url;
 	ret->submodules.strdup_strings = 1;
+	ret->hide = ret->ignore = 0;
 	return ret;
 }
 
@@ -84,6 +86,8 @@ struct cgit_repo *cgit_get_repoinfo(const char *url)
 
 	for (i = 0; i < cgit_repolist.count; i++) {
 		repo = &cgit_repolist.repos[i];
+		if (repo->ignore)
+			continue;
 		if (!strcmp(repo->url, url))
 			return repo;
 	}
@@ -282,8 +286,8 @@ static int load_mmfile(mmfile_t *file, const unsigned char *sha1)
  * ripped from git and modified to use globals instead of
  * a special callback-struct.
  */
-char *diffbuf = NULL;
-int buflen = 0;
+static char *diffbuf = NULL;
+static int buflen = 0;
 
 static int filediff_cb(void *priv, mmbuffer_t *mb, int nbuf)
 {

@@ -17,16 +17,17 @@ static time_t read_agefile(char *path)
 	time_t result;
 	size_t size;
 	char *buf;
-	static char buf2[64];
+	struct strbuf date_buf = STRBUF_INIT;
 
 	if (readfile(path, &buf, &size))
 		return -1;
 
-	if (parse_date(buf, buf2, sizeof(buf2)) > 0)
-		result = strtoul(buf2, NULL, 10);
+	if (parse_date(buf, &date_buf) == 0)
+		result = strtoul(date_buf.buf, NULL, 10);
 	else
 		result = 0;
 	free(buf);
+	strbuf_release(&date_buf);
 	return result;
 }
 
@@ -107,7 +108,7 @@ static int is_in_url(struct cgit_repo *repo)
 static void print_sort_header(const char *title, const char *sort)
 {
 	html("<th class='left'><a href='");
-	html_attr(cgit_rooturl());
+	html_attr(cgit_currenturl());
 	htmlf("?s=%s", sort);
 	if (ctx.qry.search) {
 		html("&amp;q=");
@@ -116,7 +117,7 @@ static void print_sort_header(const char *title, const char *sort)
 	htmlf("'>%s</a></th>", title);
 }
 
-static void print_header()
+static void print_header(void)
 {
 	html("<tr class='nohover'>");
 	print_sort_header("Name", "name");
@@ -139,7 +140,7 @@ static void print_pager(int items, int pagelen, char *search, char *sort)
 		class = (ctx.qry.ofs == ofs) ? "current" : NULL;
 		html("<li>");
 		cgit_index_link(fmt("[%d]", i + 1), fmt("Page %d", i + 1),
-				class, search, sort, ofs);
+				class, search, sort, ofs, 0);
 		html("</li>");
 	}
 	html("</ul>");
@@ -222,7 +223,7 @@ struct sortcolumn {
 	int (*fn)(const void *a, const void *b);
 };
 
-struct sortcolumn sortcolumn[] = {
+static const struct sortcolumn sortcolumn[] = {
 	{"section", sort_section},
 	{"name", sort_name},
 	{"desc", sort_desc},
@@ -233,7 +234,7 @@ struct sortcolumn sortcolumn[] = {
 
 static int sort_repolist(char *field)
 {
-	struct sortcolumn *column;
+	const struct sortcolumn *column;
 
 	for (column = &sortcolumn[0]; column->name; column++) {
 		if (strcmp(field, column->name))
@@ -246,7 +247,7 @@ static int sort_repolist(char *field)
 }
 
 
-void cgit_print_repolist()
+void cgit_print_repolist(void)
 {
 	int i, columns = 3, hits = 0, header = 0;
 	char *last_section = NULL;
@@ -274,6 +275,8 @@ void cgit_print_repolist()
 	html("<table summary='repository list' class='list nowrap'>");
 	for (i = 0; i < cgit_repolist.count; i++) {
 		ctx.repo = &cgit_repolist.repos[i];
+		if (ctx.repo->hide || ctx.repo->ignore)
+			continue;
 		/* Authorization beacon */
 		if (!(valid_authnz_for_repo(ctx.repo->name) &&
 		    is_match(ctx.repo) && is_in_url(ctx.repo)))
@@ -308,13 +311,19 @@ void cgit_print_repolist()
 		html_link_close();
 		html("</td><td>");
 		if (ctx.cfg.enable_index_owner) {
-			html("<a href='");
-			html_attr(cgit_rooturl());
-			html("?q=");
-			html_url_arg(ctx.repo->owner);
-			html("'>");
-			html_txt(ctx.repo->owner);
-			html("</a>");
+			if (ctx.repo->owner_filter) {
+				cgit_open_filter(ctx.repo->owner_filter);
+				html_txt(ctx.repo->owner);
+				cgit_close_filter(ctx.repo->owner_filter);
+			} else {
+				html("<a href='");
+				html_attr(cgit_currenturl());
+				html("?q=");
+				html_url_arg(ctx.repo->owner);
+				html("'>");
+				html_txt(ctx.repo->owner);
+				html("</a>");
+			}
 			html("</td><td>");
 		}
 		print_modtime(ctx.repo);
@@ -337,7 +346,7 @@ void cgit_print_repolist()
 	cgit_print_docend();
 }
 
-void cgit_print_site_readme()
+void cgit_print_site_readme(void)
 {
 	if (!ctx.cfg.root_readme)
 		return;

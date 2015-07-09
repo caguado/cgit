@@ -67,7 +67,7 @@ static int print_branch(struct refinfo *ref)
 	html("</td><td>");
 
 	if (ref->object->type == OBJ_COMMIT) {
-		cgit_commit_link(info->subject, NULL, NULL, name, NULL, NULL, 0);
+		cgit_commit_link(info->subject, NULL, NULL, name, NULL, NULL);
 		html("</td><td>");
 		cgit_open_filter(ctx.repo->email_filter, info->author_email, "refs");
 		html_txt(info->author);
@@ -82,7 +82,7 @@ static int print_branch(struct refinfo *ref)
 	return 0;
 }
 
-static void print_tag_header()
+static void print_tag_header(void)
 {
 	html("<tr class='nohover'><th class='left'>Tag</th>"
 	     "<th class='left'>Download</th>"
@@ -140,7 +140,7 @@ static int print_tag(struct refinfo *ref)
 	}
 
 	html("<tr><td>");
-	cgit_tag_link(name, NULL, NULL, ctx.qry.head, name);
+	cgit_tag_link(name, NULL, NULL, name);
 	html("</td><td>");
 	if (ctx.repo->snapshots && (obj->type == OBJ_COMMIT))
 		print_tag_downloads(ctx.repo, name);
@@ -234,7 +234,7 @@ void cgit_print_tags(int maxcount)
 	cgit_free_reflist_inner(&list);
 }
 
-void cgit_print_refs()
+void cgit_print_refs(void)
 {
 
 	html("<table class='list nowrap'>");

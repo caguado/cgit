@@ -22,7 +22,7 @@ make V=1 %{?_smp_mflags} \\\
 
 Name:           cgit
 Version:        0.11.2.1bbp
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        A fast web interface for git
 
 Group:          Development/Tools
@@ -31,6 +31,7 @@ URL:            http://git.zx2c4.com/cgit/
 Source0:        http://git.zx2c4.com/cgit/snapshot/%{name}-%{version}.tar.bz2
 Source1:        https://www.kernel.org/pub/software/scm/git/git-%{gitver}.tar.gz
 Source2:        cgitrc
+Source3:        gerrit-auth.lua
 BuildRoot:      %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 BuildRequires:  asciidoc
@@ -70,6 +71,7 @@ rm -rf %{buildroot}
 %{make_cgit} install install-man
 install -d -m0755 %{buildroot}%{_sysconfdir}
 install -p -m0644 %{SOURCE2} %{buildroot}%{_sysconfdir}/cgitrc
+install -p -m0644 %{SOURCE3} %{buildroot}%{_libexecdir}/cgit/filters/gerrit-auth.lua
 install -d -m0755 %{buildroot}%{cachedir}
 
 

@@ -35,6 +35,8 @@ REST_BRANCH_ENDPOINT = "branches"
 REST_BRANCH_NAME = "ref"
 REST_TAG_ENDPOINT = "tags"
 REST_TAG_NAME = "ref"
+REST_COMMIT_ENDPOINT = "commits"
+REST_COMMIT_NAME = "commit"
 
 -- Parameters of the local authentication instance
 REST_BASE_ENDPOINT = assert (os.getenv("CGIT_AUTH_ENDPOINT"), "Missing envar CGIT_AUTH_ENDPOINT")
@@ -303,9 +305,6 @@ function browser:prepare()
         req:setopt_httpauth(curl.AUTH_GSSNEGOTIATE)
         req:setopt_verbose(VERBOSE)
 
-	if self.caInfoPath ~= nil then
-		req:setopt_cainfo(self.caInfoPath)
-	end
 	return req
 end
 
@@ -334,10 +333,6 @@ function browser:open(url, redirect)
 
 end
 
-function browser:setCaInfo(path)
-	self.caInfoPath = path
-end
-
 -----------------------------------------------------------------------------
 -- Authorization functions
 -----------------------------------------------------------------------------
@@ -358,8 +353,6 @@ function authpdp:new(_url, _superuser, _user)
 end
 
 -- Get list of projects with at least one branch visible to the user
--- Requires:
---   Authz target user
 function authpdp:getProjectNames()
 	local query = REST_PROJECT_ENDPOINT .. "/"
 	return make_set(self:runAs(self.user, query))
@@ -367,7 +360,6 @@ end
 
 -- Get list of branches visible to user in a project
 -- Requires:
---   Authz target user
 --   Authz target project
 function authpdp:getBranchNames(_project)
 	if _project ~= nil then
@@ -381,7 +373,6 @@ end
 
 -- Get list of tags visible to user in a project
 -- Requires:
---   Authz target user
 --   Authz target project
 function authpdp:getTagNames(_project)
 	if _project ~= nil then
@@ -396,44 +387,34 @@ end
 -- Get list of refs visible to user in a project
 -- NOT IMPLEMENTED
 -- Requires:
---   Authz target user
 --   Authz target project
 function authpdp:getRefNames(_project)
 	return {}
 end
 
--- Validate access of user to project
+-- Query the commit info for a give project and sha1
+-- Alternatively a simple HEAD request may suffice to
+-- accomplish the same authorization goal
 -- Requires:
---   Authz user
---   Authz project
-function authpdp:hasAccessToProject(_project)
+--   Authz target project
+--   Authz target sha1
+function authpdp:getCommit(_project, _sha1)
 	if _project ~= nil then
-		local query = REST_PROJECT_ENDPOINT .. "/" ..
-				escape(_project)
-		return self:runAs(self.user, query) and true
-	end
-	return false
-end
-
--- Validate access of user to project and branch
--- Requires:
---   Authz user
---   Authz project
---   Authz branch
-function authpdp:hasAccessToBranch(_project, _branch)
-	if _project ~= nil and _branch ~= nil then
 		local query = REST_PROJECT_ENDPOINT  .. "/" ..
 				escape(_project)     .. "/" ..
-				REST_BRANCH_ENDPOINT .. "/" ..
-				escape(_branch)
-		return self:runAs(self.user, query) and true
+				REST_COMMIT_ENDPOINT .. "/" ..
+				_sha1
+		commit = self:runAs(self.user, query)
+		if commit[REST_COMMIT_NAME] == _sha1 then
+			return { [_sha1] = true; }
+		end
 	end
-	return false
+	return {}
 end
 
 -- Run functional query for the target user
 -- Requires:
---   Authz user
+--   Authz target user
 --   Function to query authpdp
 function authpdp:runAs(_user, _query)
 	local bhandler = browser:new()
@@ -471,6 +452,7 @@ function cgit:new(_authpdp)
 		["authenticate-cookie"] = self.authenticate_cookie;
 		["authorize-repo"     ] = self.authorize_repo;
 		["authorize-ref"      ] = self.authorize_ref;
+		["authorize-commit"   ] = self.authorize_commit;
 		["body"               ] = self.body;
 	})
 
@@ -560,6 +542,28 @@ function cgit:authorize_ref()
 	else
 		if VERBOSE ~= 0 then
 			io.stderr:write("NOT authorizing ref " .. self.request["head"])
+		end
+		return 0
+	end
+end
+
+-- Query authpdp for a commit to be displayed where for
+-- compatibility the authorization still happens here.
+function cgit:authorize_commit()
+	-- a request["head"] will contain a commit SHA1
+	local operation = "authorize_commit"
+	if self.authpdpop[operation] == nil then
+		self.authpdpop[operation] = self.authpdp:getCommit(self.request["repo"], self.request["head"])
+	end
+	if self.authpdpop[operation] ~= nil and
+		self.authpdpop[operation][self.request["head"]] then
+		if VERBOSE ~= 0 then
+			io.stderr:write("Authorizing commit " .. self.request["head"])
+		end
+		return 1
+	else
+		if VERBOSE ~= 0 then
+			io.stderr:write("NOT authorizing commit " .. self.request["head"])
 		end
 		return 0
 	end

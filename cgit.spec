@@ -21,8 +21,8 @@ make V=1 %{?_smp_mflags} \\\
      prefix=%{_prefix}
 
 Name:           cgit
-Version:        0.11.2.1bbp
-Release:        2%{?dist}
+Version:        0.11.2.2bbp
+Release:        1%{?dist}
 Summary:        A fast web interface for git
 
 Group:          Development/Tools

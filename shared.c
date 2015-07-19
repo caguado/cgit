@@ -245,8 +245,10 @@ int cgit_refs_cb(const char *refname, const unsigned char *sha1, int flags,
 	struct reflist *list = (struct reflist *)cb_data;
 	struct refinfo *info = cgit_mk_refinfo(refname, sha1);
 
-	if (info)
+	/* Authorization beacon */
+	if (valid_authnz_for_refname(refname) && info){
 		cgit_add_ref(list, info);
+	}
 	return 0;
 }
 

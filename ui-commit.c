@@ -35,6 +35,13 @@ void cgit_print_commit(char *hex, const char *prefix)
 		cgit_print_error("Bad commit reference: %s", hex);
 		return;
 	}
+
+	/* Authorization beacon */
+	if (!valid_authnz_for_commit(commit)) {
+		cgit_print_error("Access denied: %s", hex);
+		return;
+	}
+
 	info = cgit_parse_commit(commit);
 
 	format_display_notes(sha1, &notes, PAGE_ENCODING, 0);

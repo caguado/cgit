@@ -44,6 +44,11 @@ void open_authnz_refname(const char *function, const char *refname)
 	return open_authnz_filter(function, ctx.qry.repo, refname);
 }
 
+void open_authnz_commit(const char *function, const char *sha1)
+{
+	return open_authnz_filter(function, ctx.qry.repo, sha1);
+}
+
 int close_authnz_filter(void)
 {
         if (!ctx.cfg.auth_filter) {
@@ -83,23 +88,9 @@ int valid_authnz_for_refname(const char *refname)
 /* Generic function for all commit authorization beacons */
 int valid_authnz_for_commit(struct commit *commit)
 {
-	struct reflist list;
-        int i;
+	int authorized;
+	open_authnz_commit("authorize-commit", sha1_to_hex(commit->object.sha1));
+	authorized = close_authnz_filter();
 
-	list.refs = NULL;
-	list.alloc = list.count = 0;
-	/* Authorization beacon implicit in cgit_refs_cb */
-	for_each_branch_ref(cgit_refs_cb, &list);
-	if (ctx.repo->enable_remote_branches)
-		for_each_remote_ref(cgit_refs_cb, &list);
-
-	for (i = 0; i < list.count; i++) {
-		if(in_merge_bases(commit, list.refs[i]->commit->commit)) {
-			cgit_free_reflist_inner(&list);
-			return 1;
-		}
-	}
-
-	cgit_free_reflist_inner(&list);
-	return 0;
+	return authorized;
 }

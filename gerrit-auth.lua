@@ -525,7 +525,14 @@ function cgit:authorize_ref()
 	local reftype = self.request["head"]:match("^refs/([^/]*)/.*$") or self.request["head"]
 	local operation = "authorize_ref_" .. reftype
 	if self.authpdpop[operation] == nil then
-		self.authpdpop[operation] = self:authz_ref(reftype, self.request["repo"])
+		auth_ok, auth_out = pcall(self.authz_ref, self, reftype, self.request["repo"])
+		if auth_ok then
+			self.authpdpop[operation] = auth_out
+		else
+			if VERBOSE ~= 0 then
+				io.stderr:write("ERROR with " .. reftype .. ": " .. auth_out)
+			end
+		end
 	end
 	if reftype == "changes" then
 		if VERBOSE ~= 0 then

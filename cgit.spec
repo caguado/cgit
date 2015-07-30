@@ -22,7 +22,7 @@ make V=1 %{?_smp_mflags} \\\
 
 Name:           cgit
 Version:        0.11.2.2bbp
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        A fast web interface for git
 
 Group:          Development/Tools
@@ -91,6 +91,9 @@ rm -rf %{buildroot}
 
 
 %changelog
+* Thu Jul 30 2015 Carlos Aguado <carlos.aguado@epfl.ch> 0.11.2.2bbp-2
+- Fix NPE in gerrit-lua
+
 * Thu Jul 09 2015 Carlos Aguado <carlos.aguado@epfl.ch> 0.11.2.1bbp-1
 - Update to upstream v0.11.2
 - Add authentication and authorization checks

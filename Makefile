@@ -10,7 +10,7 @@ TAR = /bin/tar
 PACKAGE_NAME = cgit
 PACKAGE_BRANCH = v0.11.2.2bbp
 PACKAGE_VERSION := $(shell $(GIT) describe --abbrev=0 $(PACKAGE_BRANCH) | $(SED) -e 's/^v//' -e 's/-/./g')
-PACKAGE_RELEASE = 1
+PACKAGE_RELEASE = 2
 
 GIT_VERSION = 2.3.2
 GIT_DOWNLOAD = https://www.kernel.org/pub/software/scm/git/git-$(GIT_VERSION).tar.gz

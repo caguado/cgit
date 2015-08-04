@@ -600,7 +600,9 @@ function filter_open(...)
 	request["host"]    = select(7, ...)
 	request["https"]   = select(8, ...)
 	request["user"]    = select(9, ...)
-	request["repo"]    = select(10, ...)
+	-- Gerrit project names have .git stripped
+	-- so remove it if it comes along
+	request["repo"]    = string.gsub(select(10, ...), '\.git$', '')
 	request["head"]    = select(11, ...)
 	request["page"]    = select(12, ...)
 	request["url"]     = select(13, ...)
